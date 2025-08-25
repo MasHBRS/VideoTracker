@@ -1,17 +1,14 @@
 import os
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
-from torchvision import transforms,io
-from pathlib import Path
+from torchvision import io
 import glob
-from collections import defaultdict
 
 class VideoDataset(Dataset):
     def read_files(self,data_directory,condition):
 
-        retrieved_addresses = glob.glob(os.path.join(data_directory,condition))
+        retrieved_addresses = sorted(glob.glob(os.path.join(data_directory,condition)))
         if condition.endswith('png'):
             retrieved_files = [io.read_image(path=file).to(torch.float32) for file in retrieved_addresses]
         if condition.endswith('pt'):
