@@ -28,27 +28,26 @@ class VideoDataset(Dataset):
         return int(self.number_of_videos)
 
     def __getitem__(self, filmIndex):
-        rgbs,flows=self.read_data(filmIndex)
-        return rgbs,flows
+        coms,bboxs,masks,rgbs,flows=self.read_data(filmIndex)
+        return coms,bboxs,masks,rgbs,flows
 
     def read_data(self,filmIndex):
-        coords_to_read=self.coord_addresses[filmIndex*self.number_of_frames_per_video:(filmIndex+1)*self.number_of_frames_per_video]
-        masks_to_read=self.mask_addresses[filmIndex*self.number_of_frames_per_video:(filmIndex+1)*self.number_of_frames_per_video]
+        if(filmIndex==10 or filmIndex==9 ):
+            filmIndex=filmIndex
+        coords_to_read=self.coord_addresses[filmIndex]
+        masks_to_read=self.mask_addresses[filmIndex]
         rgbs_to_read=self.rgb_addresses[filmIndex*self.number_of_frames_per_video:(filmIndex+1)*self.number_of_frames_per_video]
         flows_to_read=self.flow_addresses[filmIndex*self.number_of_frames_per_video:(filmIndex+1)*self.number_of_frames_per_video]
 
-        coords_read=[torch.load(file, map_location="cpu") for file in coords_to_read]
-        coms_read=[com["com"] for com in coords_read]
-        bbox_read=[box["bbox"] for box in coords_read]
-        masks_read=[torch.load(file, map_location="cpu") for file in masks_to_read]
-        masks_read_kyes=[mask["masks"] for mask in masks_read]
+        coords_read=torch.load(coords_to_read, map_location="cpu") 
+        masks_read=torch.load(masks_to_read, map_location="cpu") 
         rgbs_read=[io.read_image(path=file).to(torch.float32) for file in rgbs_to_read]
         flows_read=[io.read_image(path=file).to(torch.float32) for file in flows_to_read]
 
-        coms_read_torch=torch.stack(coms_read) if len(coms_read)>0 else torch.zeros(size=(self.number_of_frames_per_video,self.max_objects_in_scene,2))
-        #bboxs_read_torch=torch.stack(bbox_read)
-        masks_read_torch=torch.stack(masks_read_kyes) if len(masks_read_kyes)>0 else torch.zeros(size=(self.number_of_frames_per_video,self.max_objects_in_scene,2))
+        coms_read_torch=coords_read['com']
+        bbox_read_torch=coords_read['bbox']
+        masks_read_torch=masks_read['masks']
         rgbs_read_torch=torch.stack(rgbs_read)
         flows_read_torch=torch.stack(flows_read)
 
-        return coms_read_torch,rgbs_read_torch,flows_read_torch
+        return coms_read_torch,bbox_read_torch,masks_read_torch,rgbs_read_torch,flows_read_torch
