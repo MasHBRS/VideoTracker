@@ -15,6 +15,7 @@ class VideoDataset(Dataset):
         self.number_of_frames_per_video=number_of_frames_per_video
         self.device=device
         self.max_objects_in_scene=max_objects_in_scene
+        self.transforms=transforms
         self.coord_addresses=sorted(glob.glob(os.path.join(data_directory,'coords*.pt')))
         self.mask_addresses=sorted(glob.glob(os.path.join(data_directory,'mask*.pt')))
         self.rgb_addresses=sorted(glob.glob(os.path.join(data_directory,'rgb*.png')))
@@ -27,7 +28,7 @@ class VideoDataset(Dataset):
     def __len__(self):
         return int(self.number_of_videos)
 
-    def __getitem__(self, filmIndex):
+    def __getitem__(self, filmIndex): # I should apply self.transforms here: to all video frames of each video. For instance: transforms.RandomHorizontalFlip(), transforms.RandomRotation(degrees=25), transforms.ColorJitter(brightness=.5, hue=.2, contrast=0.2, saturation=0.2), 
         coms,bboxs,masks,rgbs,flows=self.read_data(filmIndex)
         return coms,bboxs,masks,rgbs,flows
 
