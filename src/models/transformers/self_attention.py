@@ -51,21 +51,24 @@ class MultiHeadSelfAttention(nn.Module):
         scale = (query.shape[-1]) ** (-0.5) # smoothing gradiants to work better with softmax
 
         # similarity between each query and the keys
-        similarity = torch.bmm(query, key.permute(0, 2, 1)) * scale  # ~(B, N, N) batch-wise matrix multiplication, permmute here acts as traspose for dimentions matching
+        #similarity = torch.bmm(query, key.permute(0,1,3,2)) * scale  # ~(B, N, N) batch-wise matrix multiplication, permmute here acts as traspose for dimentions matching
+        similarity = torch.einsum('b h s d, b h t d -> b h s t', query, key)  # Shape: [256, 24, 11, 11]
+
         attention = similarity.softmax(dim=-1) # softmax across each row 
         self.attention_map = attention # for visualization \latter
 
         # attention * values
-        output = torch.bmm(attention, value)
-        return output
+        #output = torch.bmm(attention, value)
+        output=torch.einsum('b h s t, b h t d -> b h s d', attention, value)
+        return output 
 
     def split_into_heads(self, x):
         """
         Splitting a vector into multiple heads
         """
-        batch_size, num_tokens, _ = x.shape # (2, 5, 64)
-        x = x.view(batch_size, num_tokens, self.num_heads, self.head_dim)  # split dimension into heads (2, 5, 8, 8)
-        y = x.permute(0, 2, 1, 3).reshape(batch_size * self.num_heads, num_tokens, self.head_dim)  
+        batch_size, num_tokens, object_numbers_in_frames , _ = x.shape 
+        x = x.view(batch_size, num_tokens, object_numbers_in_frames,self.num_heads, self.head_dim)  # split dimension into heads
+        y = x.permute(0, 3, 1,2, 4).reshape(batch_size * self.num_heads, num_tokens, object_numbers_in_frames,self.head_dim)  
         # (2, 8, 5, 8) --> (16, 5, 8)
         # permute: This allows each head to attend independently to all tokens in the sequence.
         # (batch_size, num_heads, num_tokens, head_dim)
@@ -77,9 +80,9 @@ class MultiHeadSelfAttention(nn.Module):
         """
         Rearranging heads and recovering original shape
         """
-        _, num_tokens, dim_head = x.shape # (16, 5, 8)
-        x = x.reshape(-1, self.num_heads, num_tokens, dim_head).transpose(1, 2) # (2, 8, 5, 8) --> (2, 5, 8, 8)
-        y = x.reshape(-1, num_tokens, self.num_heads * dim_head) # (2, 5, 64)
+        _, num_tokens,max_objects_in_scene, dim_head = x.shape 
+        x = x.reshape(-1, self.num_heads ,num_tokens,max_objects_in_scene, dim_head).transpose(1, 3).transpose(1,2) 
+        y = x.reshape(-1, num_tokens, max_objects_in_scene,self.num_heads * dim_head)
         return y
 
 
@@ -176,7 +179,7 @@ class TransformerBlock(nn.Module):
         Forward pass through transformer encoder block.
         We assume the more modern PreNorm design
         """
-        assert inputs.ndim == 3 # (B, N, D)
+        assert inputs.ndim == 4 # (B, frame_number, max_objects_in_scene, D)
 
         # Self-attention.
         x = self.ln_att(inputs)
@@ -267,9 +270,9 @@ class PositionalEncoding(nn.Module):
         """
         if x.device != self.pe.device:
             self.pe = self.pe.to(x.device)
-        batch_size, num_tokens = x.shape[0], x.shape[1]   # What?? X has shape of [B, number of tokens, dim]
+        batch_size, num_tokens, max_number_of_objects = x.shape[0], x.shape[1], x.shape[2]
          # Repeat for batch and truncate to actual sequence length
-        cur_pe = self.pe.repeat(batch_size, 1, 1)[:, :num_tokens] # what is happeninig here? second dim refers to the number of tokens, and has a max value on the constructor. So we return the first 'num_token' values of the list.  
-
+        cur_pe = self.pe.repeat(batch_size, 1, 1) # what is happeninig here? second dim refers to the number of tokens, and has a max value on the constructor. So we return the first 'num_token' values of the list.  
+        cur_pe=cur_pe.unsqueeze(2).repeat(1,1,max_number_of_objects,1)
         y = x + cur_pe # Adding the positional encoding to the input tokens
         return y
