@@ -14,7 +14,7 @@ from torchvision import datasets, models, transforms
 import sys
 import os
 sys.path.append(os.path.abspath("../../.."))
-from models.transformers.self_attention import Patchifier,PositionalEncoding,TransformerBlock
+from models.transformers.attention_mechanism import Patchifier,PositionalEncoding,EncoderBlock
 from utils.util import ImageExtractor
 
 class ViT(nn.Module):
@@ -22,7 +22,7 @@ class ViT(nn.Module):
     Vision Transformer for image classification
     """
 
-    def __init__(self, img_height,img_width,channels,frame_numbers, token_dim, attn_dim, num_heads, mlp_size, num_tf_layers, num_classes,):
+    def __init__(self, img_height,img_width,channels,frame_numbers, token_dim, attn_dim, num_heads, mlp_size, num_tf_layers,max_objects_in_scene):#, num_classes):
         """ Model initializer
          num_tf_layers : The number of transformer blocks that we need
            """
@@ -32,7 +32,8 @@ class ViT(nn.Module):
         self.pathchifier = Patchifier(patch_size)"""
 
         ''' Creating the embedding for each image patch/token'''
-        
+        self.max_objects_in_scene=max_objects_in_scene
+
         self.patch_projection = nn.Sequential(   
                 nn.LayerNorm(img_height * img_width * channels),
                 nn.Linear(img_height * img_width * channels, token_dim) # token_dim = token embedding
@@ -47,8 +48,8 @@ class ViT(nn.Module):
         self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers) # return token embeddings + positional encoding
 
         # cascade of transformer blocks
-        transformer_blocks = [
-            TransformerBlock(
+        encoderBlocks = [
+            EncoderBlock(
                     token_dim=token_dim,
                     attn_dim=attn_dim,
                     num_heads=num_heads,
@@ -56,27 +57,27 @@ class ViT(nn.Module):
                 )
             for _ in range(num_tf_layers)
         ]
-        self.transformer_blocks = nn.Sequential(*transformer_blocks)
+        self.encoderBlocks = nn.Sequential(*encoderBlocks)
 
         # classifier
-        self.classifier = nn.Linear(token_dim, num_classes)
-        self.extractor=ImageExtractor()
+        #self.classifier = nn.Linear(token_dim, num_classes)
+        self.extractor=ImageExtractor(max_objects_in_scene=max_objects_in_scene)
         return
 
-    def apply_masks_or_bboxes(self,x,apply_mask=None,apply_bbox=None,max_objects_in_scene=0):
+    def apply_masks_or_bboxes(self,x,apply_mask=None,apply_bbox=None):
         output=[]
         assert x.dim()==5
         B,frame_numbers,channels,height,width = x.shape
         for batchIndx in range(x.shape[0]):
             for frameIndx in range(x.shape[1]):
                 if apply_mask is not None:
-                    output.append(self.extractor.extract_masked_images(x[batchIndx,frameIndx],masks=apply_mask[batchIndx,frameIndx],max_objects_in_scene=max_objects_in_scene)[0])
+                    output.append(self.extractor.extract_masked_images(x[batchIndx,frameIndx],masks=apply_mask[batchIndx,frameIndx])[0])
                 elif apply_bbox is not None:
-                    output.append(self.extractor.extract_bboxed_images(x[batchIndx,frameIndx],bboxes=apply_bbox[batchIndx,frameIndx],max_objects_in_scene=max_objects_in_scene))
-        outputTorch=torch.stack(output,dim=0).to(x.device).reshape(B,frame_numbers,max_objects_in_scene,channels,height,width)
+                    output.append(self.extractor.extract_bboxed_images(x[batchIndx,frameIndx],bboxes=apply_bbox[batchIndx,frameIndx]))
+        outputTorch=torch.stack(output,dim=0).to(x.device).reshape(B,frame_numbers,self.max_objects_in_scene,channels,height,width)
         return outputTorch
 
-    def forward(self, x, boxes=None,masks=None,max_objects_in_scene=0): # full Transformer encoder block forward pass
+    def forward(self, x, boxes=None,masks=None): # full Transformer encoder block forward pass
         """ 
         Forward pass
         """
@@ -91,8 +92,8 @@ class ViT(nn.Module):
         B,frame_numbers,channels,height,width = x.shape
         
         #(B,frame_numbers,max_objects_in_scene,channels,height,width)
-        filtered_imgs=self.apply_masks_or_bboxes(x,apply_mask=masks,apply_bbox=boxes,max_objects_in_scene=max_objects_in_scene) 
-        filtered_imgs=filtered_imgs.reshape(B,frame_numbers,max_objects_in_scene,-1)#(B,frame_numbers,max_objects_in_scene, channels * height * width)
+        filtered_imgs=self.apply_masks_or_bboxes(x,apply_mask=masks,apply_bbox=boxes) 
+        filtered_imgs=filtered_imgs.reshape(B,frame_numbers,self.max_objects_in_scene,-1)#(B,frame_numbers,max_objects_in_scene, channels * height * width)
         
         """# breaking image into patches, and projection to transformer token dimension
         patches = self.pathchifier(x)  # (B, 16, 8 * 8 * 3)
@@ -107,7 +108,7 @@ class ViT(nn.Module):
         tokens_with_pe = self.pos_emb(patch_tokens)
 
         # processing with transformer
-        out_tokens = self.transformer_blocks(tokens_with_pe) # shapes?
+        out_tokens = self.encoderBlocks(tokens_with_pe) # shapes?
         #out_cls_token = out_tokens[:, 0]  # fetching only CLS token
 
         # classification
@@ -119,5 +120,5 @@ class ViT(nn.Module):
         """
         Fetching the last attention maps from all TF Blocks
         """
-        attn_masks = [tf.get_attention_masks() for tf in self.transformer_blocks]
+        attn_masks = [tf.get_attention_masks() for tf in self.encoderBlocks]
         return attn_masks

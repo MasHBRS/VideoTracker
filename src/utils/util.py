@@ -6,27 +6,31 @@ import torch
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from torchvision.ops import boxes
 from tqdm import tqdm
+import torch.nn.functional as F
+import torchvision
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ImageExtractor():
-    def __init__(self)-> None:
+    def __init__(self,max_objects_in_scene)-> None:
+        self.max_objects_in_scene=max_objects_in_scene
         pass
-    def extract_masked_images(self,imgs,masks,max_objects_in_scene)-> torch.Tensor:
+    def extract_masked_images(self,imgs,masks)-> torch.Tensor:
         assert imgs.dim()==3 # imgs.shape=[C,H,W]
         
-        output=torch.zeros(size=(max_objects_in_scene,*imgs.shape),device=imgs.device) # shape=[max_objects_in_scene, C, H, W]
-        msks=torch.zeros(size=(max_objects_in_scene,*masks.shape),device=imgs.device) # shape=[max_objects_in_scene, H, W]
+        output=torch.zeros(size=(self.max_objects_in_scene,*imgs.shape),device=imgs.device) # shape=[max_objects_in_scene, C, H, W]
+        msks=torch.zeros(size=(self.max_objects_in_scene,*masks.shape),device=imgs.device) # shape=[max_objects_in_scene, H, W]
         for uc in masks.unique():
             output[uc.item()]=imgs*(masks==uc)
             msks[uc.item()]=(masks==uc)
         return output,msks 
 
-    def extract_bboxed_images(self,imgs,bboxes,max_objects_in_scene)-> torch.tensor:
+    def extract_bboxed_images(self,imgs,bboxes)-> torch.tensor:
         assert imgs.dim()==3 # imgs.shape=[C,H,W]
 
-        output=torch.zeros(size=(max_objects_in_scene,*imgs.shape),device=imgs.device) # shape=[max_objects_in_scene, C, H, W]
+        output=torch.zeros(size=(self.max_objects_in_scene,*imgs.shape),device=imgs.device) # shape=[max_objects_in_scene, C, H, W]
         output[0]=imgs
         for idx,box in enumerate(bboxes):
             if torch.all(box == -1):
@@ -111,7 +115,7 @@ def visualize_progress(loss_iters, train_loss, val_loss, valid_acc, start=0):
     plt.show()
     return
 
-def train_epoch(model, train_loader, optimizer, criterion, epoch, device):
+def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainingmode=0):
     """ Training a model for one epoch """
     
     loss_list = []
@@ -140,26 +144,26 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device):
 
 
 @torch.no_grad()
-def eval_model(model, eval_loader, criterion, device):
+def eval_model(model, eval_loader, criterion, device,trainingmode=0):
     """ Evaluating the model for either validation or test """
     correct = 0
     total = 0
     loss_list = []
     
-    for images, labels in eval_loader:
-        images = images.to(device)
-        labels = labels.to(device)
+    #for images, labels in eval_loader:
+    for coms,bboxs,masks,rgbs,flows in eval_loader:
+        images = rgbs.to(device)
         
         # Forward pass only to get logits/output
-        outputs = model(images)
+
+        recons = model(images,boxes=bboxs) if trainingmode==0 else model(images,masks=masks) if trainingmode==1 else  model(images,boxes=bboxs)
                  
-        loss = criterion(outputs, labels)
+        loss = criterion(recons, images)
         loss_list.append(loss.item())
             
         # Get predictions from the maximum value
-        preds = torch.argmax(outputs, dim=1)
-        correct += len( torch.where(preds==labels)[0] )
-        total += len(labels)
+        correct += len( torch.where(recons==images)[0] ) # TODO: check this !
+        total += len(images) # TODO: I think it should be = 1.
                  
     # Total correct predictions and loss
     accuracy = correct / total * 100
@@ -168,7 +172,7 @@ def eval_model(model, eval_loader, criterion, device):
     return accuracy, loss
 
 
-def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0):
+def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0,trainingmode=0):
     """ Training a model for a given number of epochs"""
     
     train_loss = []
@@ -184,8 +188,8 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         model.eval()  # important for dropout and batch norms
         accuracy, loss = eval_model(
                     model=model, eval_loader=valid_loader,
-                    criterion=criterion, device=device
-            )
+                    criterion=criterion, device=device,
+                    trainingmode=trainingmode)
         valid_acc.append(accuracy)
         val_loss.append(loss)
         tboard.add_scalar(f'Accuracy/Valid', accuracy, global_step=epoch+start_epoch)
@@ -196,7 +200,8 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         model.train()  # important for dropout and batch norms
         mean_loss, cur_loss_iters = train_epoch(
                 model=model, train_loader=train_loader, optimizer=optimizer,
-                criterion=criterion, epoch=epoch, device=device
+                criterion=criterion, epoch=epoch, device=device,
+                trainingmode=trainingmode
             )
         scheduler.step()
         train_loss.append(mean_loss)
@@ -212,3 +217,13 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
     
     print(f"Training completed")
     return train_loss, val_loss, loss_iters, valid_acc
+
+def l1_and_ssim_loss_function(recons, target,lambda_l1=0.8 ,lambda_ssim=0.2):
+    """
+    Combined loss function for joint optimization
+    """
+    recons_loss = F.l1_loss(recons, target)
+    #ssim_loss = 1 - ssim(recons, target)
+    #loss = lambda_l1 * recons_loss + lambda_ssim * ssim_loss
+
+    return recons_loss   

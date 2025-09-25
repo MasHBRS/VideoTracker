@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torchvision
 from torchvision import datasets, models, transforms
 
-class MultiHeadSelfAttention(nn.Module):
+class MultiHeadAttention(nn.Module):
     """ 
     Self-Attention module
 
@@ -42,7 +42,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_proj = nn.Linear(attn_dim, token_dim, bias=False) # back to the original input dimension
         return
     
-    def attention(self, query, key, value):
+    def attention(self, query, key, value, attention_mask=None):
         """
         Computing self-attention
 
@@ -53,7 +53,9 @@ class MultiHeadSelfAttention(nn.Module):
         # similarity between each query and the keys
         #similarity = torch.bmm(query, key.permute(0,1,3,2)) * scale  # ~(B, N, N) batch-wise matrix multiplication, permmute here acts as traspose for dimentions matching
         similarity = torch.einsum('b h s d, b h t d -> b h s t', query, key)  # Shape: [256, 24, 11, 11]
-
+        if attention_mask is not None:
+            similarity = similarity.masked_fill(attention_mask == 0, -1e9)
+        
         attention = similarity.softmax(dim=-1) # softmax across each row 
         self.attention_map = attention # for visualization \latter
 
@@ -86,19 +88,19 @@ class MultiHeadSelfAttention(nn.Module):
         return y
 
 
-    def forward(self, x):
+    def forward(self, xq, xk, xv, attention_mask=None):
         """ 
         Forward pass through Self-Attention module
         """
         # linear projections and splitting into heads:
         # (B, N, D) --> (B, N, Nh, Dh) --> (B * Nh, N, Dh)
-        q, k, v = self.q(x), self.k(x), self.v(x)
+        q, k, v = self.q(xq), self.k(xk), self.v(xv)
         q = self.split_into_heads(q)
         k = self.split_into_heads(k)
         v = self.split_into_heads(v)
 
         # applying attention equation
-        vect = self.attention(query=q, key=k, value=v)
+        vect = self.attention(query=q, key=k, value=v,attention_mask=attention_mask)
 
         # rearranging heads and recovering shape:
         # (B * Nh, N, Dh) --> (B N, Nh, Dh) --> (B, N, D) same shape as the input
@@ -133,7 +135,7 @@ class MLP(nn.Module):
         y = self.mlp(x)
         return y
 
-class TransformerBlock(nn.Module):
+class EncoderBlock(nn.Module):
     """
     Transformer block using self-attention
 
@@ -159,7 +161,7 @@ class TransformerBlock(nn.Module):
 
         # MHA
         self.ln_att = nn.LayerNorm(token_dim, eps=1e-6) # Layer normalization
-        self.attn = MultiHeadSelfAttention(
+        self.attn = MultiHeadAttention(
                 token_dim=token_dim,
                 attn_dim=attn_dim,
                 num_heads=num_heads
@@ -183,7 +185,7 @@ class TransformerBlock(nn.Module):
 
         # Self-attention.
         x = self.ln_att(inputs)
-        x = self.attn(x)
+        x = self.attn(x,x,x)
         y = x + inputs # residual connection
 
         # MLP
@@ -197,6 +199,83 @@ class TransformerBlock(nn.Module):
     def get_attention_masks(self):
         """ Fetching last computer attention masks """
         attn_masks = self.attn.attention_map
+        N = attn_masks.shape[-1]
+        attn_masks = attn_masks.reshape(-1, self.num_heads, N, N)
+        return attn_masks
+
+class DecoderBlock(nn.Module):
+    """
+    Decoder block
+
+    Args:
+    -----
+    token_dim: int
+        Dimensionality of the input tokens
+    attn_dim: int
+        Inner dimensionality of the attention module. Must be divisible be num_heads
+    num_heads: int
+        Number of heads in the self-attention mechanism
+    mlp_size: int
+        Hidden dimension of the MLP module
+    """
+
+    def __init__(self, token_dim, attn_dim, num_heads, mlp_size):
+        """ Module initializer """
+        super().__init__()
+        self.token_dim = token_dim
+        self.mlp_size = mlp_size
+        self.attn_dim = attn_dim
+        self.num_heads = num_heads
+
+        # MHA
+        self.ln_att = nn.LayerNorm(token_dim, eps=1e-6) # Layer normalization
+        self.self_attn = MultiHeadAttention(
+                token_dim=token_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads
+            )
+        self.cross_attn = MultiHeadAttention(
+                token_dim=token_dim,
+                attn_dim=attn_dim,
+                num_heads=num_heads
+            )
+        
+        # MLP
+        self.ln_mlp = nn.LayerNorm(token_dim, eps=1e-6) # Layer normalization
+        self.mlp = MLP(
+                in_dim=token_dim,
+                hidden_dim=mlp_size,
+            )
+        return
+
+    def forward(self, inputs, encoder_output):
+        """
+        Forward pass through transformer encoder block.
+        We assume the more modern PreNorm design
+        """
+        assert inputs.ndim == 4 # (B, frame_number, max_objects_in_scene, D)
+
+        # Self-attention.
+        x = self.ln_att(inputs)
+        x = self.self_attn(x,x,x)
+        y = x + inputs # residual connection
+
+        #Cross attention
+        normalized_y = self.ln_att(y)
+        normalized_y=self.cross_attn(normalized_y,encoder_output,encoder_output)
+        y= normalized_y + y
+
+        # MLP
+        z = self.ln_mlp(y)
+        z = self.mlp(z)
+        z = z + y # residual connection
+
+        return z
+
+
+    def get_attention_masks(self):
+        """ Fetching last computer attention masks """
+        attn_masks = self.self_attn.attention_map
         N = attn_masks.shape[-1]
         attn_masks = attn_masks.reshape(-1, self.num_heads, N, N)
         return attn_masks
@@ -276,3 +355,4 @@ class PositionalEncoding(nn.Module):
         cur_pe=cur_pe.unsqueeze(2).repeat(1,1,max_number_of_objects,1)
         y = x + cur_pe # Adding the positional encoding to the input tokens
         return y
+
