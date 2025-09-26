@@ -48,7 +48,9 @@ decoder_configs={
 validation_dataset = VideoDataset(data_path=general_configs["data_path"],
                             split='validation',
                             number_of_frames_per_video=general_configs["number_of_frames_per_video"],
-                            max_objects_in_scene=general_configs["max_objects_in_scene"])
+                            max_objects_in_scene=general_configs["max_objects_in_scene"],
+                            halve_dataset=True,
+                            is_test_dataset=False)
 valid_loader = DataLoader(dataset=validation_dataset,
                             batch_size=general_configs["batch_size"],
                             shuffle=False,
@@ -58,7 +60,9 @@ valid_loader = DataLoader(dataset=validation_dataset,
 train_dataset = VideoDataset(data_path=general_configs["data_path"],
                             split='train',
                             number_of_frames_per_video=general_configs["number_of_frames_per_video"],
-                            max_objects_in_scene=general_configs["max_objects_in_scene"])
+                            max_objects_in_scene=general_configs["max_objects_in_scene"],
+                            halve_dataset=False,
+                            is_test_dataset=False)
 train_loader = DataLoader(dataset=train_dataset,
                             batch_size=general_configs["batch_size"],
                             shuffle=True,
