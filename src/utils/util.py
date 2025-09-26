@@ -119,18 +119,17 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
     """ Training a model for one epoch """
     
     loss_list = []
-    for i, (images, labels) in enumerate(tqdm(train_loader)):
-        images = images.to(device)
-        labels = labels.to(device)
-        
+    for i, (_,bboxs,masks,rgbs,_) in enumerate(tqdm(train_loader)):
+        images = rgbs.to(device)
+
         # Clear gradients w.r.t. parameters
         optimizer.zero_grad()
          
         # Forward pass to get output/logits
-        outputs = model(images)
+        outputs = model(images,boxes=bboxs) if trainingmode==0 else model(images,masks=masks) if trainingmode==1 else  model(images,boxes=bboxs)
          
         # Calculate Loss: softmax --> cross entropy loss
-        loss = criterion(outputs, labels)
+        loss = criterion(outputs, images)
         loss_list.append(loss.item())
          
         # Getting gradients w.r.t. parameters
