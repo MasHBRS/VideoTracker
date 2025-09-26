@@ -28,7 +28,7 @@ class ViT_Decoder(nn.Module):
         TODO:
         The parameters for PositionalEncoding, should be reconsidered.  
         """
-        self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers) # return token embeddings + positional encoding
+        self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers).to(device) # return token embeddings + positional encoding
 
         # cascade of transformer blocks
         self.decoderBlocks = [
@@ -49,7 +49,7 @@ class ViT_Decoder(nn.Module):
             nn.Conv2d(self.max_objects_in_scene * self.channels, 16, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, channels, kernel_size=3, padding=1)
-        )
+        ).to(device)
         return
 
     def forward(self, encoder_output): # full Transformer encoder block forward pass
@@ -59,12 +59,12 @@ class ViT_Decoder(nn.Module):
         query=self.query_shifted_right
         query = self.pos_emb(query)
         
-        output_decoder_blocks=None
+        output_decoder_blocks=query
         for block in self.decoderBlocks:
-            output_decoder_blocks=block(query,encoder_output)
+            output_decoder_blocks=block(output_decoder_blocks,encoder_output)
         
         patch_tokens = self.patch_projection(output_decoder_blocks) 
-        patch_tokens=patch_tokens.softmax(dim=-1)
+        #patch_tokens=patch_tokens.softmax(dim=-1)
         patch_tokens=patch_tokens.reshape(-1,self.max_objects_in_scene*self.channels,self.img_height,self.img_width)
         patch_tokens=self.output_projector(patch_tokens).reshape(self.batch_size,self.frame_numbers,self.channels,self.img_height,self.img_width)
         return patch_tokens
