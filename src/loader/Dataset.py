@@ -7,7 +7,7 @@ import glob
 
 class VideoDataset(Dataset):
     
-    def __init__(self, data_path, max_objects_in_scene, split='train',transforms=None,number_of_frames_per_video=24,device='cpu'):
+    def __init__(self, data_path, max_objects_in_scene,halve_dataset,is_test_dataset , split='train',transforms=None,number_of_frames_per_video=24,device='cpu'):
         data_directory=os.path.join(data_path, split)
         if not os.path.exists(data_directory):
             if not os.path.exists(os.path.abspath(data_directory)):
@@ -20,15 +20,19 @@ class VideoDataset(Dataset):
         self.mask_addresses=sorted(glob.glob(os.path.join(data_directory,'mask*.pt')))
         self.rgb_addresses=sorted(glob.glob(os.path.join(data_directory,'rgb*.png')))
         self.flow_addresses=sorted(glob.glob(os.path.join(data_directory,'flow*.png')))
+        self.halve_dataset=halve_dataset
+        self.is_test_dataset=is_test_dataset
 
         assert len(self.coord_addresses)==len(self.mask_addresses)==(len(self.rgb_addresses)/number_of_frames_per_video)==(len(self.flow_addresses)/number_of_frames_per_video)
         self.number_of_videos=len(self.rgb_addresses)/number_of_frames_per_video
-        print(f"Data Loaded Successfully: {len(self.coord_addresses)=}, {len(self.mask_addresses)=}, {len(self.rgb_addresses)=}, {len(self.flow_addresses)=}")
+        #print(f"Data Loaded Successfully: {len(self.coord_addresses)=}, {len(self.mask_addresses)=}, {len(self.rgb_addresses)=}, {len(self.flow_addresses)=}")
 
     def __len__(self):
-        return int(self.number_of_videos)
+        return int(self.number_of_videos) if self.halve_dataset==False else  int(self.number_of_videos)//2
 
     def __getitem__(self, filmIndex): # I should apply self.transforms here: to all video frames of each video. For instance: transforms.RandomHorizontalFlip(), transforms.RandomRotation(degrees=25), transforms.ColorJitter(brightness=.5, hue=.2, contrast=0.2, saturation=0.2), 
+        if self.halve_dataset and self.is_test_dataset:
+                filmIndex+=self.__len__()
         coms,bboxs,masks,rgbs,flows=self.read_data(filmIndex)
         return coms,bboxs,masks,rgbs,flows
 
