@@ -24,10 +24,7 @@ class ViT_Decoder(nn.Module):
                 nn.LayerNorm(token_dim),
                 nn.Linear(token_dim,img_height * img_width * channels ) # token_dim = token embedding
             ).to(device)
-        """
-        TODO:
-        The parameters for PositionalEncoding, should be reconsidered.  
-        """
+
         self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers).to(device) # return token embeddings + positional encoding
 
         # cascade of transformer blocks
@@ -40,16 +37,8 @@ class ViT_Decoder(nn.Module):
                 ).to(device)
             for _ in range(num_tf_layers)
         ]
-        #self.decoderBlocks = nn.Sequential(*decoderBlocks)
-        
-        """ TODO: I have to modify the initial shape of self.query_shifter_right same as the shape of encoder_output  
-        """
-        self.query_shifted_right=nn.Parameter(torch.randn(batch_size,frame_numbers,max_objects_in_scene, token_dim))
-        self.output_projector=nn.Sequential(
-            nn.Conv2d(self.max_objects_in_scene * self.channels, 16, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, channels, kernel_size=3, padding=1)
-        ).to(device)
+    
+        self.query_shifted_right=nn.Parameter(torch.randn(batch_size, frame_numbers, 1, token_dim)) # This 1 is for resembeling encoder input shape.
         return
 
     def forward(self, encoder_output): # full Transformer encoder block forward pass
@@ -63,10 +52,8 @@ class ViT_Decoder(nn.Module):
         for block in self.decoderBlocks:
             output_decoder_blocks=block(output_decoder_blocks,encoder_output)
         
-        patch_tokens = self.patch_projection(output_decoder_blocks) 
-        #patch_tokens=patch_tokens.softmax(dim=-1)
-        patch_tokens=patch_tokens.reshape(-1,self.max_objects_in_scene*self.channels,self.img_height,self.img_width)
-        patch_tokens=self.output_projector(patch_tokens).reshape(self.batch_size,self.frame_numbers,self.channels,self.img_height,self.img_width)
+        patch_tokens = self.patch_projection(output_decoder_blocks)
+        patch_tokens=patch_tokens.reshape(self.batch_size,self.frame_numbers,self.channels,self.img_height,self.img_width)
         return patch_tokens
 
 
@@ -74,5 +61,5 @@ class ViT_Decoder(nn.Module):
         """
         Fetching the last attention maps from all TF Blocks
         """
-        attn_masks = [tf.get_attention_masks() for tf in self.encoderBlocks]
+        attn_masks = [tf.get_attention_masks() for tf in self.decoderBlocks]
         return attn_masks
