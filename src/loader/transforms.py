@@ -124,3 +124,37 @@ class CustomResize:
 
         # TODO: coms, bboxes are left
         return resized_coms,resized_bboxes,new_masks,new_rgb,new_flows
+
+class CustomColorJitter:
+    def __init__(self, brightness, hue, contrast, saturation):
+        self.brightness_factor = brightness
+        self.contrast_factor = contrast    
+        self.saturation_factor = saturation  
+        self.hue_factor = hue        
+        
+    def __call__(self, coms,bboxs,masks,rgbs,flows ):
+        brightness_factor = random.uniform(*self.brightness_factor)
+        contrast_factor   = random.uniform(*self.contrast_factor)
+        saturation_factor = random.uniform(*self.saturation_factor)
+        hue_factor        = random.uniform(*self.hue_factor)
+        
+        #rgbs shape: [B,C,H,W]
+        augmented_rgbs = torch.stack([
+            F.adjust_hue(
+                F.adjust_saturation(
+                    F.adjust_contrast(
+                        F.adjust_brightness(img, brightness_factor), 
+                        contrast_factor
+                    ), 
+                saturation_factor
+            ), hue_factor
+        )
+        for img in rgbs])
+        
+        return coms,bboxs,masks,augmented_rgbs,flows
+
+class RGBNormalizer:
+    def __init__(self):
+        pass
+    def __call__(self, coms,bboxs,masks,rgbs,flows ):
+        return coms,bboxs,masks,rgbs/255,flows 
