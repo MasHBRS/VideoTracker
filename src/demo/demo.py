@@ -13,6 +13,8 @@ from matplotlib import patches
 import torch
 from utils.util import l1_and_ssim_loss_function
 from torch.utils.tensorboard import SummaryWriter
+from utils.util import save_model
+from loader.transforms import RGBNormalizer,Composition,CustomResize,RandomHorizontalFlip,RandomVerticalFlip,CustomColorJitter
 
 
 general_configs={
@@ -21,12 +23,12 @@ general_configs={
 "max_objects_in_scene":11,
 "batch_size":64,
 "device" : torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-"img_height":128,
-"img_width":128,
+"img_height":64,
+"img_width":64,
 "channels":3,
 "learning_rate":3e-4,
 "num_epochs":60,
-"trainingMode":0 #0 training by bounding boxes, 1 training by masks. 
+"trainingMode":1 #0 training by bounding boxes, 1 training by masks. 
 }
 
 encoder_configs={
@@ -44,36 +46,58 @@ decoder_configs={
         "num_tf_layers":4
 }
 
+data_transform_config={
+        "img_height":general_configs["img_height"],
+        "img_width":general_configs["img_width"],
+        "vFlip_probability":0.6,
+        "hFlip_probability":0.6,
+        "color_jitter_brightness":(0.8, 1.2),
+        "color_jitter_hue":(-0.3, 0.3),
+        "color_jitter_contrast":(0.6, 1.8),
+        "color_jitter_saturation":(0.5, 1.5)
+}
 
+
+transform_composition = Composition([
+                                        RGBNormalizer(),
+                                        CustomResize((data_transform_config["img_height"],data_transform_config["img_width"])),
+                                        RandomVerticalFlip(data_transform_config["vFlip_probability"]),
+                                        RandomHorizontalFlip(data_transform_config["hFlip_probability"]),
+                                        CustomColorJitter(
+                                            brightness=data_transform_config["color_jitter_brightness"],
+                                            hue=data_transform_config["color_jitter_hue"],
+                                            contrast=data_transform_config["color_jitter_contrast"],
+                                            saturation=data_transform_config["color_jitter_saturation"]
+                                        )
+                                    ])
+#transform_composition=None
 validation_dataset = VideoDataset(data_path=general_configs["data_path"],
                             split='validation',
                             number_of_frames_per_video=general_configs["number_of_frames_per_video"],
                             max_objects_in_scene=general_configs["max_objects_in_scene"],
                             halve_dataset=True,
-                            is_test_dataset=False)
+                            is_test_dataset=False,
+                            transforms=transform_composition)
 valid_loader = DataLoader(dataset=validation_dataset,
                             batch_size=general_configs["batch_size"],
                             shuffle=False,
-                            drop_last=True,
-                            num_workers=8,
-                            pin_memory=True)
+                            drop_last=True)
 train_dataset = VideoDataset(data_path=general_configs["data_path"],
                             split='train',
                             number_of_frames_per_video=general_configs["number_of_frames_per_video"],
                             max_objects_in_scene=general_configs["max_objects_in_scene"],
                             halve_dataset=False,
-                            is_test_dataset=False)
+                            is_test_dataset=False,
+                            transforms=transform_composition)
 train_loader = DataLoader(dataset=train_dataset,
                             batch_size=general_configs["batch_size"],
                             shuffle=True,
-                            drop_last=True,
-                            num_workers=8,
-                            pin_memory=True)
-
+                            drop_last=True)
 
 iterator=iter(train_loader)
 coms,bboxes,masks,rgbs,flows=next(iterator)
 print(f"shapes: \r\n{coms.shape=},\r\n{bboxes.shape=},\r\n{masks.shape=},\r\n{rgbs.shape=},\r\n{flows.shape=}\r\n============================================")
+
 
 
 vit = ViT(
@@ -104,11 +128,12 @@ decoder=ViT_Decoder(
     max_objects_in_scene=general_configs["max_objects_in_scene"],
     device=general_configs["device"]
 ).to(general_configs["device"])
-print(f"ViT has {count_model_params(decoder)} parameters")
-
+print(f"Decoder has {count_model_params(decoder)} parameters")
 
 transformer=CustomizableTransformer(encoder=vit, decoder=decoder).to(general_configs["device"])
 assert count_model_params(decoder)+count_model_params(vit)==count_model_params(transformer)
+print(f"transformer has {count_model_params(transformer)} parameters")
+
 
 criterion=l1_and_ssim_loss_function
 optimizer = torch.optim.Adam(transformer.parameters(), lr=general_configs["learning_rate"])
@@ -119,7 +144,6 @@ if not os.path.exists(TBOARD_LOGS):
 
 shutil.rmtree(TBOARD_LOGS)
 writer = SummaryWriter(TBOARD_LOGS)
-
 
 train_loss, val_loss, loss_iters, valid_acc = train_model(
         model=transformer,
@@ -132,7 +156,8 @@ train_loss, val_loss, loss_iters, valid_acc = train_model(
         tboard=writer,
         trainingmode=general_configs["trainingMode"]    )
 
-from utils.util import save_model
+
+
 stats = {
     "train_loss": train_loss,
     "valid_loss": val_loss,
@@ -141,13 +166,3 @@ stats = {
 }
 save_model(transformer, optimizer, epoch=general_configs["num_epochs"], stats=stats)
 
-
-from utils.util import visualize_progress
-
-loss_iters = stats['loss_iters']
-val_loss = stats['valid_loss']
-train_loss = stats['train_loss']
-valid_acc = stats['valid_acc']
-
-visualize_progress(loss_iters, train_loss, val_loss, valid_acc, start=0)
-plt.show()
