@@ -24,5 +24,5 @@ class CustomizableTransformer(nn.Module):
         self.decoder=decoder
     def forward(self, x, boxes=None,masks=None):
         encoded=self.encoder(x, boxes,masks)
-        decoded=self.decoder(encoded)
+        decoded=self.decoder(encoded.unsqueeze(2))
         return decoded
