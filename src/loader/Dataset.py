@@ -34,6 +34,8 @@ class VideoDataset(Dataset):
         if self.halve_dataset and self.is_test_dataset:
                 filmIndex+=self.__len__()
         coms,bboxs,masks,rgbs,flows=self.read_data(filmIndex)
+        if self.transforms!=None:
+            coms,bboxs,masks,rgbs,flows = self.transforms((coms,bboxs,masks,rgbs,flows))
         return coms,bboxs,masks,rgbs,flows
 
     def read_data(self,filmIndex):
