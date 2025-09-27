@@ -28,10 +28,6 @@ class ViT(nn.Module):
            """
         super().__init__()
 
-        """# breaking image into patches, and projection to transformer token dimension
-        self.pathchifier = Patchifier(patch_size)"""
-
-        ''' Creating the embedding for each image patch/token'''
         self.max_objects_in_scene=max_objects_in_scene
 
         self.patch_projection = nn.Sequential(   
@@ -39,15 +35,9 @@ class ViT(nn.Module):
                 nn.Linear(img_height * img_width * channels, token_dim) # token_dim = token embedding
             )
 
-        # adding CLS token and positional embedding
-        '''nn.Parameter: To assign a tensor as Module attributes they are automatically added to the list of
-        its parameters, and will appear e.g. in ~Module.parameters iterator. when requires_grad = True ---> the tensor
-        is updated through training with GD. 
-        / (token_dim ** 0.5): a common trick to stabilize training by keeping the scale of weights roughly controlled (similar to Xavier initialization)'''
         self.cls_token = nn.Parameter(torch.randn(1, token_dim) / (token_dim ** 0.5), requires_grad=True)
         self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers) # return token embeddings + positional encoding
 
-        # cascade of transformer blocks
         encoderBlocks = [
             EncoderBlock(
                     token_dim=token_dim,
@@ -59,9 +49,7 @@ class ViT(nn.Module):
         ]
         self.encoderBlocks = nn.Sequential(*encoderBlocks)
 
-        # classifier
-        #self.classifier = nn.Linear(token_dim, num_classes)
-        self.extractor=ImageExtractor(max_objects_in_scene=max_objects_in_scene)
+        self.extractor=ImageExtractor(max_objects_in_scene)
         return
 
     def apply_masks_or_bboxes(self,x,apply_mask=None,apply_bbox=None):
@@ -91,29 +79,21 @@ class ViT(nn.Module):
             boxes=boxes.to(x.device)
         B,frame_numbers,channels,height,width = x.shape
         
-        #(B,frame_numbers,max_objects_in_scene,channels,height,width)
-        filtered_imgs=self.apply_masks_or_bboxes(x,apply_mask=masks,apply_bbox=boxes) 
+        filtered_imgs=self.apply_masks_or_bboxes(x,apply_mask=masks,apply_bbox=boxes) #(B,frame_numbers,max_objects_in_scene,channels,height,width)
         filtered_imgs=filtered_imgs.reshape(B,frame_numbers,self.max_objects_in_scene,-1)#(B,frame_numbers,max_objects_in_scene, channels * height * width)
         
-        """# breaking image into patches, and projection to transformer token dimension
-        patches = self.pathchifier(x)  # (B, 16, 8 * 8 * 3)
-        """
         patch_tokens = self.patch_projection(filtered_imgs)  # (B,frame_numbers,max_objects_in_scene, token_dim)
-
-        """# concatenating CLS token and adding positional embeddings
-        cur_cls_token = self.cls_token.unsqueeze(0).repeat(B, 1, 1) # shape: (B, 1, D).  B copies of the token, one for each sample in the batch.
-        tokens = torch.cat([cur_cls_token, patch_tokens], dim=1)  # ~(B, 1 + 16, D) So now, each input sequence starts with the [CLS] token, followed by the patch tokens.
-        # ---> one token for all the patches of one image, not per batch. Summary token of all image"""
         
-        tokens_with_pe = self.pos_emb(patch_tokens)
+        cur_cls_token = self.cls_token.unsqueeze(0).unsqueeze(0).repeat(B, frame_numbers,1, 1) # (B,frame_numbers, 1 , token_dim)
 
-        # processing with transformer
-        out_tokens = self.encoderBlocks(tokens_with_pe) # shapes?
-        #out_cls_token = out_tokens[:, 0]  # fetching only CLS token
+        tokens = torch.cat([cur_cls_token, patch_tokens], dim=2) # (B,frame_numbers, max_objects_in_scene + 1 , token_dim)
 
-        # classification
-        #logits = self.classifier(out_cls_token)
-        return out_tokens
+        tokens_with_pe = self.pos_emb(tokens)
+
+        out_tokens = self.encoderBlocks(tokens_with_pe) # (B,frame_numbers, max_objects_in_scene + 1 , token_dim)
+        out_cls_token = out_tokens[:,:, 0]  # fetching only CLS token
+
+        return out_cls_token #(B, frame_numbers, token_dim )
 
 
     def get_attn_mask(self):
