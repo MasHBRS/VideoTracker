@@ -14,8 +14,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from utils.util import save_model
 from loader.transforms import RGBNormalizer,Composition,CustomResize,RandomHorizontalFlip,RandomVerticalFlip,CustomColorJitter
-from utils.loss_function import ReconstructionLoss_L1_Ssim
-
+from utils.loss_function import ReconstructionLoss_L1_Ssim_Lpips
 general_configs={
 "data_path":"/home/nfs/inf6/data/datasets/MOVi/movi_c/",
 "number_of_frames_per_video":24,
@@ -133,7 +132,7 @@ transformer=CustomizableTransformer(encoder=vit, decoder=decoder).to(general_con
 assert count_model_params(decoder)+count_model_params(vit)==count_model_params(transformer)
 print(f"transformer has {count_model_params(transformer)} parameters")
 
-criterion=ReconstructionLoss_L1_Ssim(device=general_configs["device"],lambda_l1=0.5,lambda_ssim=0.3,lambda_lpips=0.2)
+criterion=ReconstructionLoss_L1_Ssim_Lpips(device=general_configs["device"],lambda_l1=0.5,lambda_ssim=0.3,lambda_lpips=0.2)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=general_configs["learning_rate"])
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 0.95)
 TBOARD_LOGS = os.path.join(os.getcwd(), "../tboard_logs", "ViT_30")
