@@ -41,7 +41,7 @@ class ViT_Decoder(nn.Module):
         self.query_shifted_right=nn.Parameter(torch.randn(batch_size, frame_numbers, 1, token_dim)) # This 1 is for resembeling encoder input shape.
         return
 
-    def forward(self, encoder_output): # full Transformer encoder block forward pass
+    def forward(self, encoder_output): # full Transformer decoder block forward pass
         """ 
         Forward pass
         """
