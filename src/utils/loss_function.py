@@ -60,7 +60,7 @@ class ReconstructionLoss_PSNR_SSIM(nn.Module):
 
         # Compute SSIM loss
         ssim_loss = 1 - self.ssim(recon_flat, target_flat)
-        psnr_loss=self.psnr(recon_flat,target_flat)
+        psnr_loss=self.psnr(recon_flat,target_flat,max_val=max(recon_flat.max(),target_flat.max()).item())
         recon_flat=target_flat=None
         torch.cuda.empty_cache()
         loss =  self.lambda_ssim * ssim_loss + self.lambda_psnr * psnr_loss
