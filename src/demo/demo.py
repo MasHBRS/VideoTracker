@@ -11,11 +11,10 @@ from utils.util import count_model_params, train_epoch,eval_model,train_model
 from matplotlib import pyplot as plt
 from matplotlib import patches
 import torch
-from utils.util import l1_and_ssim_loss_function
 from torch.utils.tensorboard import SummaryWriter
 from utils.util import save_model
 from loader.transforms import RGBNormalizer,Composition,CustomResize,RandomHorizontalFlip,RandomVerticalFlip,CustomColorJitter
-
+from utils.loss_function import ReconstructionLoss_L1_Ssim_Lpips
 
 general_configs={
 "data_path":"/home/nfs/inf6/data/datasets/MOVi/movi_c/",
@@ -135,7 +134,7 @@ assert count_model_params(decoder)+count_model_params(vit)==count_model_params(t
 print(f"transformer has {count_model_params(transformer)} parameters")
 
 
-criterion=l1_and_ssim_loss_function
+criterion=ReconstructionLoss_L1_Ssim_Lpips(device=general_configs["device"],lambda_l1=0.5,lambda_ssim=0.3,lambda_lpips=0.2)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=general_configs["learning_rate"])
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 0.95)
 TBOARD_LOGS = os.path.join(os.getcwd(), "../tboard_logs", "ViT_30")
