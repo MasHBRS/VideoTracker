@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-#from lpips  import  LPIPS
 from pytorch_msssim import SSIM, MS_SSIM  # You can also use 'torchmetrics.functional.structural_similarity_index_measure'
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-from utils.util import device
+
 class ReconstructionLoss_L1_Ssim(nn.Module):
     def __init__(self, device='cpu', lambda_l1=1.0, lambda_ssim=0.5, lambda_lpips=0.1):
         super().__init__()
