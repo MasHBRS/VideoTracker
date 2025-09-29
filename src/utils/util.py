@@ -116,7 +116,7 @@ def visualize_progress(loss_iters, train_loss, val_loss, valid_acc, start=0):
     plt.show()
     return
 
-def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainingmode=0):
+def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainingmode=0,saveImagesPerEachEpoch=False):
     """ Training a model for one epoch """
     
     loss_list = []
@@ -138,7 +138,9 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
          
         # Updating parameters
         optimizer.step()
-        
+    if saveImagesPerEachEpoch:
+        save_image(outputs[0,0], f'../saved_images/reconstructed_{epoch}.png')
+        save_image(images[0,0], f'../saved_images/original_{epoch}.png')
     mean_loss = np.mean(loss_list)
     return mean_loss, loss_list
 
@@ -198,9 +200,7 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         accuracy, loss = eval_model(
                     model=model, eval_loader=valid_loader,
                     criterion=criterion, device=device,
-                    trainingmode=trainingmode,
-                    saveImagesPerEachEpoch=saveImagesPerEachEpoch,
-                    epoch=epoch
+                    trainingmode=trainingmode
                     )
         valid_acc.append(accuracy)
         val_loss.append(loss)
@@ -213,7 +213,7 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         mean_loss, cur_loss_iters = train_epoch(
                 model=model, train_loader=train_loader, optimizer=optimizer,
                 criterion=criterion, epoch=epoch, device=device,
-                trainingmode=trainingmode
+                trainingmode=trainingmode, saveImagesPerEachEpoch=True
             )
         scheduler.step()
         train_loss.append(mean_loss)
