@@ -34,12 +34,12 @@ class MultiHeadAttention(nn.Module):
         self.head_dim = attn_dim // num_heads
 
         # query, key and value projections
-        self.q = nn.Linear(token_dim, attn_dim, bias=False) 
-        self.k = nn.Linear(token_dim, attn_dim, bias=False) 
-        self.v = nn.Linear(token_dim, attn_dim, bias=False) 
+        self.q = nn.Linear(token_dim, attn_dim, bias=True) 
+        self.k = nn.Linear(token_dim, attn_dim, bias=True) 
+        self.v = nn.Linear(token_dim, attn_dim, bias=True) 
 
         # output projection
-        self.out_proj = nn.Linear(attn_dim, token_dim, bias=False) # back to the original input dimension
+        self.out_proj = nn.Linear(attn_dim, token_dim, bias=True) # back to the original input dimension
         return
     
     def attention(self, query, key, value, attention_mask=None):

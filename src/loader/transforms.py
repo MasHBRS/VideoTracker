@@ -33,11 +33,10 @@ class RandomVerticalFlip:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, com, bbox, mask, rgb, flow):
+    def __call__(self, bbox, mask, rgb):
         
         if random.random() < self.p:
             rgb = F.vflip(rgb)
-            flow = F.vflip(flow)
             mask = F.vflip(mask)
 
             Height = rgb.shape[2]  # 128
@@ -51,12 +50,12 @@ class RandomVerticalFlip:
             # Optional: Ensure coordinates are within bounds [0, H]
             flipped_bboxes = torch.clamp(flipped_bboxes, 0, Height)
 
-            com[:,:, 1] = Height - com[:,:, 1]
+            #com[:,:, 1] = Height - com[:,:, 1]
             # Optional: Ensure coms are within bounds [0, H]
-            com = torch.clamp(com, 0, Height)
-            return com,flipped_bboxes,mask,rgb,flow
+            #com = torch.clamp(com, 0, Height)
+            return flipped_bboxes,mask,rgb
 
-        return com,bbox,mask,rgb,flow
+        return bbox,mask,rgb
 
 class RandomHorizontalFlip:
     """
@@ -75,11 +74,10 @@ class RandomHorizontalFlip:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, com, bbox, mask, rgb, flow):
+    def __call__(self, bbox, mask, rgb):
         
         if random.random() < self.p:
             rgb = F.hflip(rgb)
-            flow = F.hflip(flow)
             mask = F.hflip(mask)
 
             Width = rgb.shape[3]  # 128
@@ -93,37 +91,35 @@ class RandomHorizontalFlip:
             # Optional: Ensure coordinates are within bounds [0, H]
             flipped_bboxes = torch.clamp(flipped_bboxes, 0, Width)
 
-            com[:,:, 0] = Width - com[:,:, 0]
+            #com[:,:, 0] = Width - com[:,:, 0]
             # Optional: Ensure coms are within bounds [0, H]
-            com = torch.clamp(com, 0, Width)
-            return com,flipped_bboxes,mask,rgb,flow
-        return com,bbox,mask,rgb,flow
+            #com = torch.clamp(com, 0, Width)
+            return flipped_bboxes,mask,rgb
+        return bbox,mask,rgb
 
 class CustomResize:
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, coms,bboxs,masks,rgbs,flows ):
+    def __call__(self, bboxs,masks,rgbs):
         
         scale_height = self.size[0] / rgbs.shape[2]
         scale_width = self.size[1] / rgbs.shape[3]
         
         resizer=T.Resize(self.size)
         new_rgb = resizer(rgbs)
-        new_flows = resizer(flows)
         new_masks = resizer(masks)
         
         resized_bboxes = bboxs.clone()
         resized_bboxes[..., [0, 2]] = resized_bboxes[..., [0, 2]] * scale_width  # xmin, xmax
         resized_bboxes[..., [1, 3]] = resized_bboxes[..., [1, 3]] * scale_height  # ymin, ymax
 
-        resized_coms = coms.clone()
-        resized_coms[..., 1] = resized_coms[..., 1] * scale_width  # xmin, xmax
-        resized_coms[..., 0] = resized_coms[..., 0] * scale_height  # ymin, ymax
-
+        #resized_coms = coms.clone()
+        #resized_coms[..., 1] = resized_coms[..., 1] * scale_width  # xmin, xmax
+        #resized_coms[..., 0] = resized_coms[..., 0] * scale_height  # ymin, ymax
 
         # TODO: coms, bboxes are left
-        return resized_coms,resized_bboxes,new_masks,new_rgb,new_flows
+        return resized_bboxes,new_masks,new_rgb
 
 class CustomColorJitter:
     def __init__(self, brightness, hue, contrast, saturation):
@@ -132,7 +128,7 @@ class CustomColorJitter:
         self.saturation_factor = saturation  
         self.hue_factor = hue        
         
-    def __call__(self, coms,bboxs,masks,rgbs,flows ):
+    def __call__(self, bboxs,masks,rgbs ):
         brightness_factor = random.uniform(*self.brightness_factor)
         contrast_factor   = random.uniform(*self.contrast_factor)
         saturation_factor = random.uniform(*self.saturation_factor)
@@ -150,11 +146,10 @@ class CustomColorJitter:
             ), hue_factor
         )
         for img in rgbs])
-        
-        return coms,bboxs,masks,augmented_rgbs,flows
+        return bboxs,masks,augmented_rgbs
 
 class RGBNormalizer:
     def __init__(self):
         pass
-    def __call__(self, coms,bboxs,masks,rgbs,flows ):
-        return coms,bboxs,masks,rgbs/255,flows 
+    def __call__(self, bboxs,masks,rgbs ):
+        return bboxs,masks,rgbs/255

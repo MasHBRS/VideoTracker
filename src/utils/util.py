@@ -119,7 +119,7 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
     """ Training a model for one epoch """
     
     loss_list = []
-    for i, (_,bboxs,masks,rgbs,_) in enumerate(tqdm(train_loader)):
+    for i, (bboxs,masks,rgbs) in enumerate(tqdm(train_loader)):
         images = rgbs.to(device)
 
         # Clear gradients w.r.t. parameters
@@ -150,7 +150,7 @@ def eval_model(model, eval_loader, criterion, device,trainingmode=0):
     loss_list = []
     
     #for images, labels in eval_loader:
-    for coms,bboxs,masks,rgbs,flows in eval_loader:
+    for bboxs,masks,rgbs in eval_loader:
         images = rgbs.to(device)
         
         # Forward pass only to get logits/output
@@ -171,14 +171,14 @@ def eval_model(model, eval_loader, criterion, device,trainingmode=0):
     return accuracy, loss
 
 
-def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0,trainingmode=0):
+def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, conf,tboard=None, start_epoch=0,trainingmode=0):
     """ Training a model for a given number of epochs"""
     
     train_loss = []
     val_loss =  []
     loss_iters = []
     valid_acc = []
-
+   
     for epoch in range(num_epochs):
         print(f"Started Epoch {epoch+1}/{num_epochs}...")
         
@@ -213,7 +213,8 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         print(f"    Valid loss: {round(loss, 5)}")
         print(f"    Valid Accuracy: {accuracy}%")
         print("\n")
-    
+    if conf is not None:
+        tboard.add_hparams(hparam_dict=conf,metric_dict={"Valid Acc":accuracy, "Valid Loss":round(loss, 5), "Train Loss": round(mean_loss, 5) })
     print(f"Training completed")
     return train_loss, val_loss, loss_iters, valid_acc
 
