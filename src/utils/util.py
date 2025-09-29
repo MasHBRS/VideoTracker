@@ -68,8 +68,8 @@ def save_model(model, optimizer, epoch, stats):
 def load_model(model, optimizer, savepath):
     """ Loading pretrained checkpoint """
     
-    checkpoint = torch.load(savepath, map_location="cpu")
-    model.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = torch.load(savepath,weights_only=False)
+    model=model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint["epoch"]
     stats = checkpoint["stats"]
