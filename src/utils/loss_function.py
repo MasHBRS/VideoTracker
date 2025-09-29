@@ -1,82 +1,65 @@
 import torch
 import torch.nn as nn
 from pytorch_msssim import SSIM, MS_SSIM  # You can also use 'torchmetrics.functional.structural_similarity_index_measure'
-from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+#from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-class ReconstructionLoss_L1_Ssim_Lpips(nn.Module):
-    def __init__(self, device='cpu', lambda_l1=1.0, lambda_ssim=0.5, lambda_lpips=0.1):
+class ReconstructionLoss_L1_Ssim(nn.Module):
+    def __init__(self, device='cpu', lambda_l1=0.5, lambda_ssim=0.5):
         super().__init__()
         self.lambda_l1 = lambda_l1
         self.lambda_ssim = lambda_ssim
-        self.lambda_lpips = lambda_lpips
         self.device=device
         self.ssim = SSIM(data_range=1.0, size_average=True, channel=3)  # For RGB
         self.l1 = nn.L1Loss()
-        self.lpips_loss = LearnedPerceptualImagePatchSimilarity(net_type='alex').to(device)  # LPIPS uses [-1,1] range
 
     def forward(self, recon, target):
-        # Ensure images are in [0,1] for SSIM
-        _, _, C, H, W = target.shape
-        target_flat = target.view(-1, C, H, W)
-        recon_flat = recon.view(-1, C, H, W)
+        """
+        recon, target: (B, T, C, H, W)
+        """
+        B, T, C, H, W = target.shape
 
-        # Compute SSIM loss
-        ssim_loss = 1 - self.ssim(recon_flat, target_flat)
-        recon_flat=target_flat=None
-        # L1 loss
-        l1_loss = self.l1(recon, target)
+        total_loss = 0.0
+        for t in range(T):
+            recon_t = recon[:, t, :, :, :]
+            target_t = target[:, t, :, :, :]
 
-        # LPIPS expects [-1,1]
-        lpips_loss = self.compute_loss_metric(recon, target,self.lpips_loss)
+            # SSIM loss per frame
+            ssim_loss = 1 - self.ssim(recon_t, target_t)
 
-        # Weighted sum
-        loss = self.lambda_l1 * l1_loss + self.lambda_ssim * ssim_loss + self.lambda_lpips * lpips_loss
-        return loss
+            # L1 loss per frame
+            l1_loss = self.l1(recon_t, target_t)
+
+            total_loss += self.lambda_l1 * l1_loss + self.lambda_ssim * ssim_loss
+
+        # Average over frames
+        return total_loss / T
     
-    def compute_loss_metric(self,tensor1, tensor2,metric):
-        batch_size, T, C, H, W = tensor1.shape
-        losses = []
-        for i in range(0, batch_size, 1):  # One batch at a time
-            for t in range(T): # One time step at a time
-                loss = metric(tensor1[i:i+1, t, :, :, :], tensor2[i:i+1, t, :, :, :])
-                losses.append(loss.item())
-        torch.cuda.empty_cache()  # Clear memory
-        return sum(losses)/len(losses)
-
-
 class ReconstructionLoss_PSNR_SSIM(nn.Module):
-    def __init__(self, device='cpu', lambda_psnr=1.0, lambda_ssim=0.5):
+    def __init__(self, lambda_psnr=1.0, lambda_ssim=0.5):
         super().__init__()
         self.lambda_psnr = lambda_psnr
         self.lambda_ssim = lambda_ssim
-        self.device=device
         self.ssim = SSIM(data_range=1.0, size_average=True, channel=3)  # For RGB
 
     def forward(self, recon, target):
-        # Ensure images are in [0,1] for SSIM
-        _, _, C, H, W = target.shape
-        target_flat = target.view(-1, C, H, W)
-        recon_flat = recon.view(-1, C, H, W)
+        """
+        recon, target: (B, T, C, H, W)
+        """
+        B, T, C, H, W = target.shape
+        total_loss = 0.0
+        for t in range(T):
+            recon_t = recon[:, t, :, :, :]
+            target_t = target[:, t, :, :, :]
+            # SSIM loss
+            ssim_loss = 1 - self.ssim(recon_t, target_t)
+            # PSNR loss (negative because higher PSNR = better)
+            psnr_loss = -self.psnr(recon_t, target_t, max_val=1.0)
+            total_loss += self.lambda_ssim * ssim_loss + self.lambda_psnr * psnr_loss
+        return total_loss / T
 
-        # Compute SSIM loss
-        ssim_loss = 1 - self.ssim(recon_flat, target_flat)
-        psnr_loss=self.psnr(recon_flat,target_flat,max_val=max(recon_flat.max(),target_flat.max()).item())
-        recon_flat=target_flat=None
-        torch.cuda.empty_cache()
-        loss =  self.lambda_ssim * ssim_loss + self.lambda_psnr * psnr_loss
-        return loss
-
-    def psnr(self,img1, img2, max_val=1.0):
-        assert img1.shape == img2.shape,f"Image shapes must match, got {img1.shape} and {img2.shape}"
-
-        # Calculate Mean Squared Error (MSE)
+    def psnr(self, img1, img2, max_val=1.0):
         mse = torch.mean((img1 - img2) ** 2)
-
-        # Handle case where MSE is zero (perfect reconstruction)
         if mse == 0:
-            return torch.tensor(float('inf'))
-
-        # Calculate PSNR: 20 * log10(MAX) - 10 * log10(MSE)
-        psnr_value = 20 * torch.log10(torch.tensor(max_val)) - 10 * torch.log10(mse)
-
+            return torch.tensor(float('inf'), device=img1.device)
+        psnr_value = 20 * torch.log10(torch.tensor(max_val, device=img1.device)) - 10 * torch.log10(mse)
         return psnr_value
