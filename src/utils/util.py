@@ -10,6 +10,7 @@ from torchvision.ops import boxes
 from tqdm import tqdm
 import torch.nn.functional as F
 import torchvision
+from torchvision.utils import save_image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -143,7 +144,14 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
 
 
 @torch.no_grad()
-def eval_model(model, eval_loader, criterion, device,trainingmode=0):
+def eval_model(model, 
+                eval_loader, 
+                criterion, 
+                device,
+                trainingmode=0,
+                saveImagesPerEachEpoch=False,
+                epoch=0
+               ):
     """ Evaluating the model for either validation or test """
     correct = 0
     total = 0
@@ -167,11 +175,13 @@ def eval_model(model, eval_loader, criterion, device,trainingmode=0):
     # Total correct predictions and loss
     accuracy = correct / total * 100
     loss = np.mean(loss_list)
-    
+    if saveImagesPerEachEpoch:
+        save_image(recons[0,0], f'../saved_images/reconstructed_{epoch}.png')
+        save_image(images[0,0], f'../saved_images/original_{epoch}.png')
     return accuracy, loss
 
 
-def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, conf,tboard=None, start_epoch=0,trainingmode=0):
+def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, conf,tboard=None, start_epoch=0,trainingmode=0,saveImagesPerEachEpoch=False):
     """ Training a model for a given number of epochs"""
     
     train_loss = []
@@ -188,7 +198,10 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         accuracy, loss = eval_model(
                     model=model, eval_loader=valid_loader,
                     criterion=criterion, device=device,
-                    trainingmode=trainingmode)
+                    trainingmode=trainingmode,
+                    saveImagesPerEachEpoch=saveImagesPerEachEpoch,
+                    epoch=epoch
+                    )
         valid_acc.append(accuracy)
         val_loss.append(loss)
         tboard.add_scalar(f'Accuracy/Valid', accuracy, global_step=epoch+start_epoch)
