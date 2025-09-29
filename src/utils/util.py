@@ -119,7 +119,7 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
     """ Training a model for one epoch """
     
     loss_list = []
-    for i, (_,bboxs,masks,rgbs,_) in enumerate(tqdm(train_loader)):
+    for i, (bboxs,masks,rgbs) in enumerate(tqdm(train_loader)):
         images = rgbs.to(device)
 
         # Clear gradients w.r.t. parameters
@@ -150,7 +150,7 @@ def eval_model(model, eval_loader, criterion, device,trainingmode=0):
     loss_list = []
     
     #for images, labels in eval_loader:
-    for coms,bboxs,masks,rgbs,flows in eval_loader:
+    for bboxs,masks,rgbs in eval_loader:
         images = rgbs.to(device)
         
         # Forward pass only to get logits/output
