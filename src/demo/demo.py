@@ -1,6 +1,7 @@
 import shutil
 import sys
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'src')))
 from loader.Dataset import VideoDataset
 from torch.utils.data import DataLoader
@@ -12,7 +13,7 @@ from matplotlib import pyplot as plt
 from matplotlib import patches
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from utils.loss_function import ImprovedLoss5D,ReconstructionLoss_L1_Ssim, ReconstructionLoss_PSNR_SSIM, ReconstructionLoss_MSE_SSIM
+from utils.loss_function import L1_SSIM_LPIPS_Loss5D_MemoryEfficient#ReconstructionLoss_L1_Ssim, ReconstructionLoss_PSNR_SSIM
 from loader.transforms import RGBNormalizer,Composition,CustomResize,RandomHorizontalFlip,RandomVerticalFlip,CustomColorJitter
 
 
@@ -148,7 +149,7 @@ print(f"transformer has {count_model_params(transformer)} parameters")
 
 #criterion=ReconstructionLoss_MSE_SSIM(device=general_configs["device"],lambda_mse=1,lambda_ssim=0.01)
 #criterion=ReconstructionLoss_L1_Ssim(device=general_configs["device"],lambda_l1=0.1,lambda_ssim=0.9)
-criterion=ImprovedLoss5D()
+criterion=L1_SSIM_LPIPS_Loss5D_MemoryEfficient(l1_lambda=0.5,ssim_lambda=0, lpips_lambda=0.5)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=general_configs["learning_rate"])
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 0.95)
 TBOARD_LOGS = os.path.join(os.getcwd(), "../tboard_logs", "ViT_30")
@@ -168,7 +169,7 @@ train_loss, val_loss, loss_iters, valid_acc = train_model(
         num_epochs=general_configs["num_epochs"],
         tboard=writer,
         trainingmode=general_configs["trainingMode"],
-        conf=(decoder_configs,encoder_configs,general_configs),saveImagesPerEachEpoch=True   )
+        saveImagesPerEachEpoch=True   )
 
 from utils.util import save_model
 stats = {

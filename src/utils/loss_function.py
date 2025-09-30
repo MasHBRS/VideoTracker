@@ -3,6 +3,7 @@ import torch.nn as nn
 from pytorch_msssim import SSIM, MS_SSIM  # You can also use 'torchmetrics.functional.structural_similarity_index_measure'
 #from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torchvision import models
+import lpips 
 
 
 class ReconstructionLoss_L1_Ssim(nn.Module):
@@ -129,3 +130,49 @@ class ImprovedLoss5D(nn.Module):
         
         percep = self.perceptual_loss(pred, target)
         return l1 + 0.05 * percep
+
+class L1_SSIM_LPIPS_Loss5D_MemoryEfficient(nn.Module):
+    def __init__(self, l1_lambda=1.0, ssim_lambda=1.0, lpips_lambda=0.1, frame_interval=2):
+        super().__init__()
+        self.l1_lambda = l1_lambda
+        self.ssim_lambda = ssim_lambda  
+        self.lpips_lambda = lpips_lambda
+        self.frame_interval = frame_interval
+        
+        self.l1_loss = nn.L1Loss()
+        self.ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
+        self.lpips_loss = lpips.LPIPS(net='alex').to('cuda')
+        
+    def compute_frame_based_losses(self, pred, target, loss_fn, fn_name):
+        """Compute loss on subset of frames to save memory"""
+        batch_size, num_frames = pred.shape[0], pred.shape[1]
+        
+        # Use every nth frame
+        frame_indices = torch.arange(0, num_frames, self.frame_interval).to('cuda')
+        pred_subset = pred[:, frame_indices].reshape(-1, *pred.shape[2:])
+        target_subset = target[:, frame_indices].reshape(-1, *target.shape[2:])
+        
+        if fn_name == 'ssim':
+            ssim_val = self.ssim_loss(pred_subset, target_subset)
+            return 1.0 - ssim_val
+        elif fn_name == 'lpips':
+            return self.lpips_loss(pred_subset, target_subset).mean()
+        
+    def forward(self, pred, target):
+        # L1 on all data
+        l1_loss = self.l1_loss(pred, target)
+        
+        # SSIM and LPIPS on frame subset
+        ssim_loss = self.compute_frame_based_losses(pred, target, self.ssim_loss, 'ssim') if self.ssim_lambda is not None else 0
+        lpips_loss = self.compute_frame_based_losses(pred, target, self.lpips_loss, 'lpips') if self.lpips_lambda is not None else 0
+        
+        total_loss = (self.l1_lambda * l1_loss + 
+                     self.ssim_lambda * ssim_loss + 
+                     self.lpips_lambda * lpips_loss)
+        return total_loss
+        """return total_loss, {
+            'l1': l1_loss.item(),
+            'ssim': ssim_loss.item(),
+            'lpips': lpips_loss.item(),
+            'total': total_loss.item()
+        }"""

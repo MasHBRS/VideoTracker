@@ -180,7 +180,7 @@ def eval_model(model,
     return accuracy, loss
 
 
-def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, conf,tboard=None, start_epoch=0,trainingmode=0,saveImagesPerEachEpoch=False):
+def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0,trainingmode=0,saveImagesPerEachEpoch=False):
     """ Training a model for a given number of epochs"""
     
     train_loss = []
@@ -223,8 +223,6 @@ def train_model(model, optimizer, scheduler, criterion, train_loader, valid_load
         print(f"    Valid loss: {round(loss, 5)}")
         print(f"    Valid Accuracy: {accuracy}%")
         print("\n")
-    if conf is not None:
-        tboard.add_hparams(hparam_dict=conf,metric_dict={"Valid Acc":accuracy, "Valid Loss":round(loss, 5), "Train Loss": round(mean_loss, 5) })
     print(f"Training completed")
     return train_loss, val_loss, loss_iters, valid_acc
 
