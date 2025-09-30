@@ -139,8 +139,8 @@ def train_epoch(model, train_loader, optimizer, criterion, epoch, device,trainin
         # Updating parameters
         optimizer.step()
     if saveImagesPerEachEpoch:
-        save_image(outputs[0,0], f'../saved_images/reconstructed_{epoch}.png')
-        save_image(images[0,0], f'../saved_images/original_{epoch}.png')
+        save_image(outputs[0,0], f'reconstructed_{epoch}.png')
+        save_image(images[0,0], f'original_{epoch}.png')
     mean_loss = np.mean(loss_list)
     return mean_loss, loss_list
 
@@ -177,9 +177,6 @@ def eval_model(model,
     # Total correct predictions and loss
     accuracy = correct / total * 100
     loss = np.mean(loss_list)
-    if saveImagesPerEachEpoch:
-        save_image(recons[0,0], f'../saved_images/reconstructed_{epoch}.png')
-        save_image(images[0,0], f'../saved_images/original_{epoch}.png')
     return accuracy, loss
 
 
