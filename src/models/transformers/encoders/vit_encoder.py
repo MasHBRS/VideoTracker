@@ -30,11 +30,21 @@ class ViT(nn.Module):
 
         self.max_objects_in_scene=max_objects_in_scene
 
-        self.patch_projection = nn.Sequential(   
+        """self.patch_projection = nn.Sequential(   
                 nn.LayerNorm(img_height * img_width * channels),
                 nn.Linear(img_height * img_width * channels, token_dim) # token_dim = token embedding
-            )
-
+            )"""
+        kernelSize=4
+        self.patch_projection = nn.Sequential(
+            nn.Conv2d(channels, token_dim//4, kernel_size=kernelSize,stride= kernelSize,padding=1),
+            nn.ReLU(),
+            nn.Conv2d(token_dim//4,token_dim//2 , kernel_size=kernelSize, stride=kernelSize ,padding=1),
+            nn.ReLU(),
+            nn.Conv2d(token_dim//2, (token_dim*3)//4 , kernel_size=kernelSize, stride=kernelSize ,padding=1),
+            nn.ReLU(),
+            nn.Conv2d((token_dim*3)//4,token_dim , kernel_size=kernelSize, stride=kernelSize ,padding=2),
+            nn.Sigmoid()
+        )
         self.cls_token = nn.Parameter(torch.randn(1, token_dim) / (token_dim ** 0.5), requires_grad=True)
         self.pos_emb = PositionalEncoding(token_dim,max_len=frame_numbers) # return token embeddings + positional encoding
 
@@ -80,15 +90,16 @@ class ViT(nn.Module):
         B,frame_numbers,channels,height,width = x.shape
         
         filtered_imgs=self.apply_masks_or_bboxes(x,apply_mask=masks,apply_bbox=boxes) #(B,frame_numbers,max_objects_in_scene,channels,height,width)
-        filtered_imgs=filtered_imgs.reshape(B,frame_numbers,self.max_objects_in_scene,-1)#(B,frame_numbers,max_objects_in_scene, channels * height * width)
+        filtered_imgs=filtered_imgs.reshape(-1,channels,height,width)#(B*frame_numbers*max_objects_in_scene, channels, height, width)
         
-        patch_tokens = self.patch_projection(filtered_imgs)  # (B,frame_numbers,max_objects_in_scene, token_dim)
-        
+        patch_tokens = self.patch_projection(filtered_imgs)  # (B * frame_numbers * max_objects_in_scene, token_dim)
+        patch_tokens = patch_tokens.reshape(B,frame_numbers,self.max_objects_in_scene,-1)  # (B,frame_numbers,max_objects_in_scene, token_dim)
         cur_cls_token = self.cls_token.unsqueeze(0).unsqueeze(0).repeat(B, frame_numbers,1, 1) # (B,frame_numbers, 1 , token_dim)
 
         tokens = torch.cat([cur_cls_token, patch_tokens], dim=2) # (B,frame_numbers, max_objects_in_scene + 1 , token_dim)
 
         tokens_with_pe = self.pos_emb(tokens)
+
 
         out_tokens = self.encoderBlocks(tokens_with_pe) # (B,frame_numbers, max_objects_in_scene + 1 , token_dim)
         out_cls_token = out_tokens[:,:, 0]  # fetching only CLS token

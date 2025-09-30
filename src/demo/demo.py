@@ -35,18 +35,18 @@ general_configs={
 }
 
 encoder_configs={
-        "token_dim":128,
-        "attn_dim":128,
-        "num_heads":4,
-        "mlp_size":512,
-        "num_tf_layers":4
+        "token_dim": 768,        # Increased from 512
+        "num_heads": 12,         # head_dim = 768/12 = 64 (good!)
+        "mlp_size": 3072,        # 4x token_dim (standard)
+        "num_tf_layers": 12,      # More reasonable depth
+        "attn_dim":768
 }
 decoder_configs={
-        "token_dim":128,
-        "attn_dim":128,
-        "num_heads":4,
-        "mlp_size":512,
-        "num_tf_layers":4
+        "token_dim":768,
+        "attn_dim":768,
+        "num_heads":12,
+        "mlp_size":3072,
+        "num_tf_layers":12
 }
 
 data_transform_config={
@@ -66,14 +66,14 @@ transform_composition = Composition([
                                         CustomResize((data_transform_config["img_height"],data_transform_config["img_width"])),
                                         RandomVerticalFlip(data_transform_config["vFlip_probability"]),
                                         RandomHorizontalFlip(data_transform_config["hFlip_probability"]),
-                                        #CustomColorJitter(
-                                        #    brightness=data_transform_config["color_jitter_brightness"],
-                                        #    hue=data_transform_config["color_jitter_hue"],
-                                        #    contrast=data_transform_config["color_jitter_contrast"],
-                                        #    saturation=data_transform_config["color_jitter_saturation"]
-                                        #)
+                                        CustomColorJitter(
+                                            brightness=data_transform_config["color_jitter_brightness"],
+                                            hue=data_transform_config["color_jitter_hue"],
+                                            contrast=data_transform_config["color_jitter_contrast"],
+                                            saturation=data_transform_config["color_jitter_saturation"]
+                                        )
                                     ])
-#transform_composition=None
+
 validation_dataset = VideoDataset(data_path=general_configs["data_path"],
                             split='validation',
                             original_number_of_frames_per_video=general_configs["original_number_of_frames_per_video"],
@@ -121,7 +121,7 @@ def defineVIT():
 
 vit=defineVIT()
 print(f"ViT has {count_model_params(vit)} parameters")
-
+print(f"{vit=}")
 
 def defineDecoder():
     return ViT_Decoder(
@@ -142,14 +142,13 @@ def defineDecoder():
 
 decoder=defineDecoder()
 print(f"Decoder has {count_model_params(decoder)} parameters")
+print(f"{decoder=}")
 
 transformer=CustomizableTransformer(encoder=vit, decoder=decoder).to(general_configs["device"])
 assert count_model_params(decoder)+count_model_params(vit)==count_model_params(transformer)
 print(f"transformer has {count_model_params(transformer)} parameters")
 
-#criterion=ReconstructionLoss_MSE_SSIM(device=general_configs["device"],lambda_mse=1,lambda_ssim=0.01)
-#criterion=ReconstructionLoss_L1_Ssim(device=general_configs["device"],lambda_l1=0.1,lambda_ssim=0.9)
-criterion=L1_SSIM_LPIPS_Loss5D_MemoryEfficient(l1_lambda=0.5,ssim_lambda=0, lpips_lambda=0.5)
+criterion=L1_SSIM_LPIPS_Loss5D_MemoryEfficient(l1_lambda=1.0,ssim_lambda=0.5, lpips_lambda=0.01)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=general_configs["learning_rate"])
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 0.95)
 TBOARD_LOGS = os.path.join(os.getcwd(), "../tboard_logs", "ViT_30")
@@ -179,4 +178,5 @@ stats = {
     "valid_acc": valid_acc
 }
 save_model(transformer, optimizer, epoch=general_configs["num_epochs"], stats=stats)
+
 
