@@ -2,3 +2,4 @@ venv
 venv2
 *__pycache__*
 src/saved_images/*.png
+*.png
