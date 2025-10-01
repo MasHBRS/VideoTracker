@@ -14,8 +14,8 @@ from torchvision import datasets, models, transforms
 import sys
 import os
 sys.path.append(os.path.abspath("../.."))
-from models.transformers.encoders.vit_encoder import ViT
-from models.transformers.decoders.vit_decoder import ViT_Decoder 
+from models.transformers.encoders.object_level.vit_encoder import ViT
+from models.transformers.decoders.object_level.vit_decoder import ViT_Decoder 
 
 class CustomizableTransformer(nn.Module):
     def __init__(self,encoder,decoder):

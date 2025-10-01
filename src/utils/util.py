@@ -179,18 +179,84 @@ def eval_model(model,
     loss = np.mean(loss_list)
     return accuracy, loss
 
+@torch.no_grad()
+def eval_model_image_based(model, 
+                eval_loader, 
+                criterion, 
+                device,
+                trainingmode=0,
+                saveImagesPerEachEpoch=False,
+                epoch=0
+               ):
+    """ Evaluating the model for either validation or test """
+    correct = 0
+    total = 0
+    loss_list = []
+    
+    #for images, labels in eval_loader:
+    for rgbs in eval_loader:
+        images = rgbs.to(device)
+        
+        # Forward pass only to get logits/output
 
-def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0,trainingmode=0,saveImagesPerEachEpoch=False):
+        recons = model(images)
+                 
+        loss = criterion(recons, images)
+        loss_list.append(loss.item())
+            
+        # Get predictions from the maximum value
+        correct += len( torch.where(recons==images)[0] ) # TODO: check this !
+        total += len(images) # TODO: I think it should be = 1.
+                 
+    # Total correct predictions and loss
+    accuracy = correct / total * 100
+    loss = np.mean(loss_list)
+    return accuracy, loss
+
+def train_epoch_image_based(model, train_loader, optimizer, criterion, epoch, device,trainingmode=0,saveImagesPerEachEpoch=False):
+    """ Training a model for one epoch """
+    
+    loss_list = []
+    for i, rgbs in enumerate(tqdm(train_loader)):
+        images = rgbs.to(device)
+
+        # Clear gradients w.r.t. parameters
+        optimizer.zero_grad()
+         
+        # Forward pass to get output/logits
+        outputs = model(images)
+         
+        # Calculate Loss: softmax --> cross entropy loss
+        loss = criterion(outputs, images)
+        loss_list.append(loss.item())
+         
+        # Getting gradients w.r.t. parameters
+        loss.backward()
+         
+        # Updating parameters
+        optimizer.step()
+    if saveImagesPerEachEpoch:
+        save_image(outputs[0,0], f'reconstructed_{epoch}.png')
+        save_image(images[0,0], f'original_{epoch}.png')
+    mean_loss = np.mean(loss_list)
+    return mean_loss, loss_list
+
+def train_model(model, optimizer, scheduler, criterion, train_loader, valid_loader, num_epochs, tboard=None, start_epoch=0,trainingmode=0,saveImagesPerEachEpoch=False,eval_model_func=None,train_epoch_func=None):
     """ Training a model for a given number of epochs"""
     
     train_loss = []
     val_loss =  []
     loss_iters = []
     valid_acc = []
-   
+
+    if eval_model_func is not None:
+        eval_model=eval_model_func
+    if train_epoch_func is not None:
+        train_epoch=train_epoch_func
+    
     for epoch in range(num_epochs):
         print(f"Started Epoch {epoch+1}/{num_epochs}...")
-        
+         
         # validation epoch
         print("  --> Running valdiation epoch")
         model.eval()  # important for dropout and batch norms

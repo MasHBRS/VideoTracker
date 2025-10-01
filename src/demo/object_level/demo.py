@@ -2,11 +2,11 @@ import shutil
 import sys
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'src')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..', 'src')))
 from loader.Dataset import VideoDataset
 from torch.utils.data import DataLoader
-from models.transformers.encoders.vit_encoder import ViT
-from models.transformers.decoders.vit_decoder import ViT_Decoder
+from models.transformers.encoders.object_level.vit_encoder import ViT
+from models.transformers.decoders.object_level.vit_decoder import ViT_Decoder
 from models.transformers.CustomTransformer import CustomizableTransformer
 from utils.util import count_model_params, train_epoch, eval_model, train_model, load_model 
 from matplotlib import pyplot as plt
@@ -15,8 +15,6 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from utils.loss_function import L1_SSIM_LPIPS_Loss5D_MemoryEfficient#ReconstructionLoss_L1_Ssim, ReconstructionLoss_PSNR_SSIM
 from loader.transforms import RGBNormalizer,Composition,CustomResize,RandomHorizontalFlip,RandomVerticalFlip,CustomColorJitter
-
-
 
 
 general_configs={

@@ -13,11 +13,11 @@ from torchvision import datasets, models, transforms
 
 import sys
 import os
-sys.path.append(os.path.abspath("../../.."))
-from models.transformers.attention_mechanism import Patchifier,PositionalEncoding,DecoderBlock
+sys.path.append(os.path.abspath("../../../.."))
+from models.transformers.attention_mechanism import PositionalEncoding,DecoderBlock
 
 class ViT_Decoder(nn.Module):
-    def __init__(self, batch_size, img_height,img_width,channels,frame_numbers, token_dim, attn_dim, num_heads, mlp_size, num_tf_layers,max_objects_in_scene,device):
+    def __init__(self, batch_size, img_height,img_width,channels,frame_numbers, token_dim, attn_dim, num_heads, mlp_size, num_tf_layers,device,max_objects_in_scene=0):
         super().__init__()
         self.token_dim=token_dim
         self.batch_size, self.img_height,self.img_width,self.channels,self.frame_numbers,self.max_objects_in_scene=batch_size, img_height,img_width,channels,frame_numbers,max_objects_in_scene

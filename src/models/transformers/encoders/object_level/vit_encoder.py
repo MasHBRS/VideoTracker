@@ -13,8 +13,8 @@ from torchvision import datasets, models, transforms
 
 import sys
 import os
-sys.path.append(os.path.abspath("../../.."))
-from models.transformers.attention_mechanism import Patchifier,PositionalEncoding,EncoderBlock
+sys.path.append(os.path.abspath("../../../.."))
+from models.transformers.attention_mechanism import PositionalEncoding,EncoderBlock
 from utils.util import ImageExtractor
 
 class ViT(nn.Module):

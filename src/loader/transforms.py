@@ -8,10 +8,14 @@ class Composition:
     def __init__(self, transform):
         self.transform = transform
 
-    def __call__(self, data):
-        
+    def __call__(self, data=None):
         for t in self.transform:
-                data= t(*data)
+                if (torch.is_tensor(data)):
+                    data= t(data)
+                elif len(data)>1:
+                    data= t(*data)
+                else :
+                    data= t(data)
         if(len(self.transform)==0):
             return []
         return data
@@ -33,10 +37,12 @@ class RandomVerticalFlip:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, bbox, mask, rgb):
+    def __call__(self, bbox=None, mask=None, rgb=None):
         
         if random.random() < self.p:
             rgb = F.vflip(rgb)
+            if (bbox is None and mask is None):
+                return rgb
             mask = F.vflip(mask)
 
             Height = rgb.shape[2]  # 128
@@ -54,7 +60,8 @@ class RandomVerticalFlip:
             # Optional: Ensure coms are within bounds [0, H]
             #com = torch.clamp(com, 0, Height)
             return flipped_bboxes,mask,rgb
-
+        if (bbox is None and mask is None):
+            return rgb
         return bbox,mask,rgb
 
 class RandomHorizontalFlip:
@@ -78,6 +85,8 @@ class RandomHorizontalFlip:
         
         if random.random() < self.p:
             rgb = F.hflip(rgb)
+            if (bbox is None and mask is None):
+                return rgb
             mask = F.hflip(mask)
 
             Width = rgb.shape[3]  # 128
@@ -95,19 +104,23 @@ class RandomHorizontalFlip:
             # Optional: Ensure coms are within bounds [0, H]
             #com = torch.clamp(com, 0, Width)
             return flipped_bboxes,mask,rgb
+        if (bbox is None and mask is None):
+            return rgb
         return bbox,mask,rgb
 
 class CustomResize:
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, bboxs,masks,rgbs):
+    def __call__(self, rgb,bboxs=None,masks=None):
         
-        scale_height = self.size[0] / rgbs.shape[2]
-        scale_width = self.size[1] / rgbs.shape[3]
+        scale_height = self.size[0] / rgb.shape[2]
+        scale_width = self.size[1] / rgb.shape[3]
         
         resizer=T.Resize(self.size)
-        new_rgb = resizer(rgbs)
+        new_rgb = resizer(rgb)
+        if (bboxs is None and masks is None):
+            return rgb
         new_masks = resizer(masks)
         
         resized_bboxes = bboxs.clone()
@@ -128,7 +141,7 @@ class CustomColorJitter:
         self.saturation_factor = saturation  
         self.hue_factor = hue        
         
-    def __call__(self, bboxs,masks,rgbs ):
+    def __call__(self, bboxs,masks,rgb ):
         brightness_factor = random.uniform(*self.brightness_factor)
         contrast_factor   = random.uniform(*self.contrast_factor)
         saturation_factor = random.uniform(*self.saturation_factor)
@@ -145,11 +158,19 @@ class CustomColorJitter:
                 saturation_factor
             ), hue_factor
         )
-        for img in rgbs])
+        for img in rgb])
         return bboxs,masks,augmented_rgbs
 
 class RGBNormalizer:
     def __init__(self):
         pass
-    def __call__(self, bboxs,masks,rgbs ):
-        return bboxs,masks,rgbs/255
+    def __call__(self, rgb=None,bboxs=None,masks=None ):
+        if  bboxs==None and masks==None:
+            return rgb/255
+        else: 
+            return bboxs,masks, rgb/255
+class RGBImageBasedNormalizer:
+    def __init__(self):
+        pass
+    def __call__(self, rgb=None):
+        return rgb/255
